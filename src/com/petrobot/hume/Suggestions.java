@@ -51,6 +51,8 @@ final class Suggestions {
     static final long MAX_AGE_MS = 2L * 60 * 60 * 1000;  // recommendations rotate every 2 hours
     /** POOL titles are fetched per service; PER_SOURCE of them are picked at random each refresh. */
     static final int PER_SOURCE = 3, POOL = 20, MAX_ITEMS = 10;
+    /** Recommendation slides when the source is Stremio. */
+    static final int STREMIO_SLIDES = 6;
 
     /** A streaming service available in India: TMDB provider id, display name, Android TV package. */
     static final class Provider {
@@ -303,9 +305,14 @@ final class Suggestions {
         java.util.Collections.shuffle(sources, rnd);
         List<Item> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
-        for (int round = 0; round < PER_SOURCE && out.size() < MAX_ITEMS; round++) {
+        // Stremio's lists are two flat top charts, so take up to 6 slides from them (3 per chart
+        // when both movies and series are on); service-based sources keep their 3-per-service turn.
+        boolean stremio = from.equals(SRC_STREMIO);
+        int perSource = stremio ? STREMIO_SLIDES : PER_SOURCE;
+        int maxItems = stremio ? STREMIO_SLIDES : MAX_ITEMS;
+        for (int round = 0; round < perSource && out.size() < maxItems; round++) {
             for (List<Item> src : sources) {
-                if (round < src.size() && out.size() < MAX_ITEMS) {
+                if (round < src.size() && out.size() < maxItems) {
                     Item it = src.get(round);
                     if (seen.add(it.title.toLowerCase())) out.add(it);
                 }
