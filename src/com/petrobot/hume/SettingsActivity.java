@@ -299,8 +299,7 @@ public class SettingsActivity extends Activity {
             row("Opens in", () -> {
                 Suggestions.Provider p = Suggestions.stremioApp(this);
                 return Suggestions.installed(this, p.pkg) ? p.name : "Stremio (not installed)";
-            }, () -> Toast.makeText(this, "Titles open in Stremio, or in Nuvio when only Nuvio is installed.",
-                    Toast.LENGTH_LONG).show());
+            }, this::chooseStremioApp);
         } else if (Suggestions.showRecs(this)) {
             row("Streaming services", () -> {
                 int n = Suggestions.providers(this).size();
@@ -919,9 +918,27 @@ public class SettingsActivity extends Activity {
                 }).setNegativeButton("Cancel", null).show();
     }
 
+    /** Which installed app Stremio recommendations open in. */
+    void chooseStremioApp() {
+        Suggestions.Provider[] apps = Suggestions.STREMIO_APPS;
+        String[] names = new String[apps.length + 1];
+        names[0] = "Automatic  (" + Suggestions.stremioApp(this).name + ")";
+        String chosen = Suggestions.prefs(this).getString(Suggestions.K_STREMIO_APP, "");
+        int cur = 0;
+        for (int i = 0; i < apps.length; i++) {
+            names[i + 1] = apps[i].name + (Suggestions.installed(this, apps[i].pkg) ? "" : "  (not installed)");
+            if (apps[i].pkg.equals(chosen)) cur = i + 1;
+        }
+        dialog("Opens in").setSingleChoiceItems(names, cur, (d, w) -> {
+            Suggestions.prefs(this).edit().putString(Suggestions.K_STREMIO_APP, w == 0 ? "" : apps[w - 1].pkg).apply();
+            refreshAll();
+            d.dismiss();
+        }).show();
+    }
+
     void chooseAdvance() {
-        int[] secs = {0, 6, 8, 12};
-        String[] names = {"Off", "Every 6 s", "Every 8 s", "Every 12 s"};
+        int[] secs = {0, 4, 6, 8, 12};
+        String[] names = {"Off", "Every 4 s", "Every 6 s", "Every 8 s", "Every 12 s"};
         int cur = 0;
         for (int i = 0; i < secs.length; i++) if (secs[i] == Suggestions.advanceSeconds(this)) cur = i;
         dialog("Auto-advance").setSingleChoiceItems(names, cur, (d, w) -> {

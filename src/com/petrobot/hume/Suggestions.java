@@ -78,9 +78,14 @@ final class Suggestions {
      * Apps that open Cinemeta titles by IMDb id. Not streaming services, so they never appear in
      * PROVIDERS; Stremio comes first because it is the one on the Play Store.
      */
-    static final int STREMIO_ID = -1, NUVIO_ID = -2;
+    static final int STREMIO_ID = -1, NUVIO_ID = -2, NUVIO_ARC_ID = -3;
     static final Provider STREMIO = new Provider(STREMIO_ID, "Stremio", "com.stremio.one", "", ""),
-            NUVIO = new Provider(NUVIO_ID, "Nuvio", "com.nuvio.tv", "", "");
+            NUVIO = new Provider(NUVIO_ID, "Nuvio", "com.nuvio.tv", "", ""),
+            NUVIO_ARC = new Provider(NUVIO_ARC_ID, "Nuvio Arc", "com.nuvio.tv.test", "", "");
+
+    /** Apps a Stremio recommendation can open in, in the order Settings offers them. */
+    static final Provider[] STREMIO_APPS = {STREMIO, NUVIO, NUVIO_ARC};
+    static final String K_STREMIO_APP = "stremio_app";  // "" = automatic, else a package name
 
     /** Original-language filters offered in settings (TMDB ISO 639-1 codes). */
     static final String[] LANG_CODES = {"hi", "en", "ta", "te", "ml", "kn", "bn", "mr"};
@@ -178,9 +183,19 @@ final class Suggestions {
         return prefs(c).getString(K_SOURCE, SRC_JUSTWATCH);
     }
 
-    /** Stremio when installed (or neither is), else Nuvio. */
+    /**
+     * The app Stremio recommendations open in: the one chosen in Settings if it is installed,
+     * otherwise Nuvio Arc, then Stremio, then Nuvio (whichever is installed first).
+     */
     static Provider stremioApp(Context c) {
-        return !installed(c, STREMIO.pkg) && installed(c, NUVIO.pkg) ? NUVIO : STREMIO;
+        String chosen = prefs(c).getString(K_STREMIO_APP, "");
+        for (Provider p : STREMIO_APPS) if (p.pkg.equals(chosen) && installed(c, p.pkg)) return p;
+        for (Provider p : new Provider[]{NUVIO_ARC, STREMIO, NUVIO}) if (installed(c, p.pkg)) return p;
+        return STREMIO;
+    }
+
+    static boolean isNuvio(Provider p) {
+        return p.id == NUVIO_ID || p.id == NUVIO_ARC_ID;
     }
 
     static String sourceName(String s) {
@@ -677,7 +692,7 @@ final class Suggestions {
      */
     static void openStremio(Context c, Item it, Provider p) {
         String type = it.type.equals("tv") ? "series" : "movie";
-        String url = p.id == NUVIO_ID ? "nuvio://detail/" + type + "/" + it.link
+        String url = isNuvio(p) ? "nuvio://detail/" + type + "/" + it.link
                 : "stremio:///detail/" + type + "/" + it.link + (type.equals("movie") ? "/" + it.link : "");
         PackageManager pm = c.getPackageManager();
         Intent i = view(url, p.pkg);

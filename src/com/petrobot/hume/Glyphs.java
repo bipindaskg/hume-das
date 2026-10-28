@@ -51,6 +51,15 @@ final class Glyphs {
                 r.set(s * 0.61f, s * 0.62f, s * 0.85f, s * 0.84f);
                 c.drawRoundRect(r, s * 0.04f, s * 0.04f, p);
                 break;
+            case "bluetooth":  // the Bluetooth rune
+                path.moveTo(s * 0.28f, s * 0.32f);
+                path.lineTo(s * 0.72f, s * 0.68f);
+                path.lineTo(s * 0.5f, s * 0.87f);
+                path.lineTo(s * 0.5f, s * 0.13f);
+                path.lineTo(s * 0.72f, s * 0.32f);
+                path.lineTo(s * 0.28f, s * 0.68f);
+                c.drawPath(path, p);
+                break;
             case "moon":
                 p.setStyle(Paint.Style.FILL);
                 path.addCircle(m, m, s * 0.34f, Path.Direction.CW);

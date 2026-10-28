@@ -236,7 +236,8 @@ final class Search {
     }
 
     static boolean hasStremioApp(Context c) {
-        return Suggestions.installed(c, Suggestions.STREMIO.pkg) || Suggestions.installed(c, Suggestions.NUVIO.pkg);
+        for (Suggestions.Provider p : Suggestions.STREMIO_APPS) if (Suggestions.installed(c, p.pkg)) return true;
+        return false;
     }
 
     /** "Open in Stremio" (or Nuvio) by IMDb id, after the services, when one of them is installed. */

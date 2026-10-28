@@ -3191,8 +3191,10 @@ public class MainActivity extends Activity {
                     if (!Perms.hasLocation(this)) Perms.requestLocation(this);
                     else Suggestions.start(this, new Intent(Settings.ACTION_WIFI_SETTINGS));
                 }));
-        cells.add(ccTile(panel, col + gap, cap + gap, col, cap, "moon", "Do Not Disturb", this::dndState, false,
-                v -> toggleDnd()));
+        cells.add(ccTile(panel, col + gap, cap + gap, col, cap, "bluetooth", "Bluetooth", this::bluetoothState, false,
+                v -> {
+                    if (Suggestions.start(this, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS))) closeProfilePicker();
+                }));
         // Row 3: Audio | Sleep Timer
         int y3 = 2 * (cap + gap);
         cells.add(ccTile(panel, 0, y3, col, cap, "audio", "Audio", this::audioOutput, false,
@@ -3447,6 +3449,15 @@ public class MainActivity extends Activity {
             return ssid.replace("\"", "");
         } catch (Exception e) {
             return "Connected";
+        }
+    }
+
+    /** On/Off from the system setting, which needs no Bluetooth permission. */
+    String bluetoothState() {
+        try {
+            return Settings.Global.getInt(getContentResolver(), "bluetooth_on", 0) == 1 ? "On" : "Off";
+        } catch (Exception e) {
+            return "Off";
         }
     }
 

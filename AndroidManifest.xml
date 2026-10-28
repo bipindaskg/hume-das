@@ -20,6 +20,9 @@
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
 
     <queries>
+        <package android:name="com.stremio.one" />
+        <package android:name="com.nuvio.tv" />
+        <package android:name="com.nuvio.tv.test" />
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
