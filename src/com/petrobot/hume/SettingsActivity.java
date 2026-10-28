@@ -50,7 +50,7 @@ public class SettingsActivity extends Activity {
     // tvOS-style pages: the main list opens a page per section; Back returns to the main list.
     static final String ROOT = "root", PROFILES = "Profiles", SHELF = "Top Shelf", PRESENT = "Presentation",
             INPUTS = "Inputs", WEATHER = "Weather", WATCHING = "Continue Watching", HOME = "Home",
-            PERMS = "Permissions", ABOUT = "About";
+            PERMS = "Permissions", ABOUT = "About", HIDDEN = "Hidden Apps";
 
     FrameLayout leftPane;
     ScrollView scroller;
@@ -99,6 +99,7 @@ public class SettingsActivity extends Activity {
             case WEATHER: pageWeather(); break;
             case WATCHING: pageWatching(); break;
             case HOME: pageHome(); break;
+            case HIDDEN: pageHidden(); break;
             case PERMS: pagePermissions(); break;
             case ABOUT: pageAbout(); break;
             default: pageRoot(); break;
@@ -206,6 +207,7 @@ public class SettingsActivity extends Activity {
             case WEATHER: grad = new int[]{0xFF5AC8FA, 0xFF2D6BD8}; glyph = null; break;
             case WATCHING: grad = new int[]{0xFFFF6482, 0xFFD6305A}; glyph = "present"; break;
             case HOME: grad = new int[]{0xFF30D158, 0xFF1E9E48}; glyph = "house"; break;
+            case HIDDEN: grad = new int[]{0xFFFF9F0A, 0xFFE0700A}; glyph = "shelf"; break;
             case PERMS: grad = new int[]{0xFF8E8E93, 0xFF48484A}; glyph = "shield"; break;
             default: grad = new int[]{0xFF8E8E93, 0xFF3A3A3C}; glyph = "gear"; break;
         }
@@ -243,6 +245,10 @@ public class SettingsActivity extends Activity {
             String k = Profiles.homePrefs(this).getString("wallpaper", "aurora");
             int i = java.util.Arrays.asList(MainActivity.WALL_KEYS).indexOf(k);
             return MainActivity.WALL_NAMES[Math.max(0, i)];
+        });
+        nav(HIDDEN, () -> {
+            int n = hiddenKeys().size();
+            return n == 0 ? "None" : String.valueOf(n);
         });
         nav(PERMS, () -> {
             int missing = (Perms.hasListener(this) || !Perms.listenerSupported(this) ? 0 : 1) + (Perms.hasLocation(this) ? 0 : 1)
@@ -529,6 +535,56 @@ public class SettingsActivity extends Activity {
             Profiles.homePrefs(this).edit().remove("order").apply();
             Toast.makeText(this, "Layout reset", Toast.LENGTH_SHORT).show();
         });
+    }
+
+    /** Keys of the apps hidden from Home on the current profile. */
+    Set<String> hiddenKeys() {
+        return new java.util.HashSet<>(Profiles.homePrefs(this).getStringSet("hidden", java.util.Collections.<String>emptySet()));
+    }
+
+    /** Name of a hidden app from its key (a flattened component name such as pkg/.Activity). */
+    String appLabel(String key) {
+        if (MainActivity.INPUTS_KEY.equals(key)) return "Inputs";
+        try {
+            android.content.ComponentName cn = android.content.ComponentName.unflattenFromString(key);
+            if (cn != null) {
+                android.content.pm.PackageManager pm = getPackageManager();
+                return pm.getActivityInfo(cn, 0).loadLabel(pm).toString();
+            }
+        } catch (Exception e) {
+            // app no longer installed: fall through
+        }
+        return null;
+    }
+
+    /** Hidden Apps: every app hidden from Home, with Unhide to bring it back. */
+    void pageHidden() {
+        List<String[]> items = new ArrayList<>();  // {label, key}; uninstalled apps are dropped
+        for (String k : hiddenKeys()) {
+            String label = appLabel(k);
+            if (label != null) items.add(new String[]{label, k});
+        }
+        java.util.Collections.sort(items, (x, y) -> x[0].compareToIgnoreCase(y[0]));
+        if (items.isEmpty()) {
+            TextView t = new TextView(this);
+            t.setText("No hidden apps.\nHold OK on an app on Home and choose Hide to move it here.");
+            t.setTextColor(0x99FFFFFF);
+            t.setTypeface(Ui.font(this, "regular"));
+            Ui.textSize(t, 15);
+            t.setPadding(Ui.px(this, 14), Ui.px(this, 8), 0, 0);
+            list.addView(t);
+            return;
+        }
+        section("Select an app to unhide it");
+        for (String[] it : items) {
+            row(it[0], () -> "Unhide", () -> {
+                Set<String> hidden = hiddenKeys();
+                hidden.remove(it[1]);
+                Profiles.homePrefs(this).edit().putStringSet("hidden", hidden).apply();
+                Toast.makeText(this, it[0] + " is back on Home", Toast.LENGTH_SHORT).show();
+                show(HIDDEN);
+            });
+        }
     }
 
     void pagePermissions() {

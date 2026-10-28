@@ -338,7 +338,7 @@ public class MainActivity extends Activity {
             wallStyle = ws;
             setWallpaper(ws);
         }
-        if (returningFromSettings && !folderMode && launchOverlay == null && moveIndex < 0) reload(currentKey());
+        if ((returningFromSettings || hiddenChanged()) && !folderMode && launchOverlay == null && moveIndex < 0) reload(currentKey());
         returningFromSettings = false;
         loadHero();
         if (launchOverlay != null) finishLaunchReturn();
@@ -645,6 +645,16 @@ public class MainActivity extends Activity {
         setContentView(root);
     }
 
+    /** True when the hidden-apps list was changed elsewhere (Settings > Hidden Apps). */
+    boolean hiddenChanged() {
+        Set<String> now = prefs.getStringSet(PREF_HIDDEN, Collections.emptySet());
+        Set<String> had = new HashSet<>();
+        for (AppEntry e : hiddenApps) had.add(e.key);
+        for (String k : now) if (all.containsKey(k) && !had.contains(k)) return true;
+        for (String k : had) if (!now.contains(k)) return true;
+        return false;
+    }
+
     void buildGrid() {
         stopWiggle();
         shown.clear();
@@ -652,7 +662,7 @@ public class MainActivity extends Activity {
             shown.addAll(hiddenApps);
         } else {
             shown.addAll(apps);
-            if (!hiddenApps.isEmpty()) shown.add(folderEntry());
+            // Hidden apps are managed in Settings > Hidden Apps; no folder tile on Home.
         }
         // Like tvOS, the home grid has no big title; only the folder gets a header.
         titleBox.setVisibility(folderMode ? View.VISIBLE : View.GONE);
@@ -2767,7 +2777,10 @@ public class MainActivity extends Activity {
                 return true;
             }
             if (pk == KeyEvent.KEYCODE_MENU) {
-                if (!pd) profileMenu(getCurrentFocus());
+                if (!pd) {
+                    if (pickerLayer == ccLayer) closeProfilePicker();  // Menu again closes Control Center
+                    else profileMenu(getCurrentFocus());
+                }
                 return true;
             }
             if (pk == KeyEvent.KEYCODE_DPAD_UP || pk == KeyEvent.KEYCODE_DPAD_DOWN
@@ -2803,10 +2816,8 @@ public class MainActivity extends Activity {
             }
         }
         if (k == KeyEvent.KEYCODE_MENU) {
-            if (!down) {
-                int i = tiles.indexOf(getCurrentFocus());
-                if (i >= 0 && !FOLDER_KEY.equals(shown.get(i).key)) showOptions(i);
-            }
+            // The remote's Menu button opens Control Center (app options: hold OK on a card).
+            if (!down) showControlCenter();
             return true;
         }
         if (k == KeyEvent.KEYCODE_BACK) {
@@ -3021,7 +3032,7 @@ public class MainActivity extends Activity {
         buildGrid();
         shelfEntry = null;
         focusIndex(Math.min(i, shown.size() - 1));
-        toast(hide ? a.label + " moved to More Apps" : a.label + " is back on Home");
+        toast(hide ? a.label + " hidden \u00b7 unhide it in Settings > Hidden Apps" : a.label + " is back on Home");
     }
 
     void registerPackageReceiver() {
@@ -3156,6 +3167,7 @@ public class MainActivity extends Activity {
         stopSway(null);
         popoverReturn = ccButton;
         FrameLayout layer = new FrameLayout(this);
+        ccLayer = layer;
         layer.setClickable(true);
         layer.setClipChildren(false);
         addBlurredBackdrop(layer, 0x8C000000);
@@ -4272,6 +4284,8 @@ public class MainActivity extends Activity {
     }
 
     View popoverReturn;
+    /** The open Control Center overlay, so the Menu key can toggle it. */
+    FrameLayout ccLayer;
 
     void closeProfilePicker() {
         if (pickerLayer == null) return;
