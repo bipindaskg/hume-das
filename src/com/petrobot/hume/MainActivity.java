@@ -156,6 +156,10 @@ public class MainActivity extends Activity {
     final LiquidGlass.Backdrop glassSource = () -> glassBg;
     View dockRow;
     boolean returningFromSettings;
+    /** Request code and target app for the "Change Thumbnail" picture picker. */
+    static final int REQ_THUMB = 7401;
+    String pendingThumbKey;
+    int thumbPickerStage;
     final java.util.concurrent.ExecutorService io = java.util.concurrent.Executors.newSingleThreadExecutor();
     final Runnable heroAdvance = () -> {
         if (this.search != null) scheduleAdvance();  // nothing to see under search; keep the slot
@@ -2834,6 +2838,12 @@ public class MainActivity extends Activity {
                 e.banner = new BitmapDrawable(getResources(), tvosCard(e));
             }
         }
+        // Thumbnails the user picked from the TV's storage replace the card art (per profile).
+        String profileId = Profiles.current(this).id;
+        for (AppEntry e : all.values()) {
+            Bitmap custom = CustomThumbs.load(this, profileId, e.key);
+            if (custom != null) e.banner = new BitmapDrawable(getResources(), custom);
+        }
 
         Set<String> hidden = prefs.getStringSet(PREF_HIDDEN, Collections.emptySet());
         Map<String, AppEntry> pool = new LinkedHashMap<>();
@@ -3054,6 +3064,16 @@ public class MainActivity extends Activity {
                 actions.add(() -> setHidden(a, true));
             }
         }
+        labels.add("Change Thumbnail");
+        actions.add(() -> pickThumbnail(a));
+        if (CustomThumbs.has(this, Profiles.current(this).id, a.key)) {
+            labels.add("Reset Thumbnail");
+            actions.add(() -> {
+                CustomThumbs.remove(this, Profiles.current(this).id, a.key);
+                reload(a.key);
+                toast("Original thumbnail restored");
+            });
+        }
         if (!isSettings(a) && !INPUTS_KEY.equals(a.key)) {
             labels.add("App Info");
             actions.add(() -> startSafe(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -3071,6 +3091,57 @@ public class MainActivity extends Activity {
             });
         }
         showMenu(tile, a.label, labels, actions, labels.indexOf("Uninstall"));
+    }
+
+    // ---------------------------------------------------------------- custom thumbnails
+
+    /**
+     * Opens the TV's picture/file picker so the user can choose an image for this card. Tries the
+     * common pickers in turn, since TVs differ in which one they ship.
+     */
+    void pickThumbnail(AppEntry a) {
+        pendingThumbKey = a.key;
+        thumbPickerStage = 0;
+        launchThumbPicker();
+    }
+
+    void launchThumbPicker() {
+        while (thumbPickerStage < 3) {
+            Intent i;
+            switch (thumbPickerStage++) {
+                case 0:
+                    i = new Intent(Intent.ACTION_GET_CONTENT).setType("image/*")
+                            .addCategory(Intent.CATEGORY_OPENABLE);
+                    break;
+                case 1:
+                    i = new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*")
+                            .addCategory(Intent.CATEGORY_OPENABLE);
+                    break;
+                default:
+                    i = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+            }
+            try {
+                startActivityForResult(i, REQ_THUMB);
+                return;
+            } catch (ActivityNotFoundException | SecurityException e) {
+                // try the next kind of picker
+            }
+        }
+        pendingThumbKey = null;
+        toast("No gallery or file manager found on this TV");
+    }
+
+    void onThumbPicked(Uri uri) {
+        String key = pendingThumbKey;
+        pendingThumbKey = null;
+        if (key == null || uri == null) return;
+        boolean ok = CustomThumbs.save(this, Profiles.current(this).id, key, uri);
+        if (ok) {
+            reload(key);
+            toast("Thumbnail changed");
+        } else {
+            toast("Couldn't use that picture");
+        }
     }
 
     // ---------------------------------------------------------------- Control Center
@@ -4056,6 +4127,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
+        if (req == REQ_THUMB) {
+            if (res == RESULT_OK && data != null && data.getData() != null) onThumbPicked(data.getData());
+            else if (res != RESULT_OK && pendingThumbKey != null) {
+                // Cancelled; a picker that returned nothing is not retried.
+                pendingThumbKey = null;
+            }
+            return;
+        }
         if (req == SearchPanel.REQ_VOICE && res == RESULT_OK && search != null) search.onVoice(data);
     }
 
