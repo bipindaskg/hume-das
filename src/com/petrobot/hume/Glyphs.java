@@ -70,6 +70,17 @@ final class Glyphs {
                     }
                 }
                 break;
+            case "developer":  // code brackets with a slash: Developer options
+                p.setStrokeWidth(s * 0.08f);
+                path.moveTo(s * 0.34f, s * 0.26f);
+                path.lineTo(s * 0.12f, s * 0.5f);
+                path.lineTo(s * 0.34f, s * 0.74f);
+                path.moveTo(s * 0.66f, s * 0.26f);
+                path.lineTo(s * 0.88f, s * 0.5f);
+                path.lineTo(s * 0.66f, s * 0.74f);
+                c.drawPath(path, p);
+                c.drawLine(s * 0.56f, s * 0.2f, s * 0.44f, s * 0.8f, p);
+                break;
             case "moon":
                 p.setStyle(Paint.Style.FILL);
                 path.addCircle(m, m, s * 0.34f, Path.Direction.CW);

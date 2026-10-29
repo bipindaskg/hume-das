@@ -3127,7 +3127,7 @@ public class MainActivity extends Activity {
         ccLayer = layer;
         layer.setClickable(true);
         layer.setClipChildren(false);
-        addBlurredBackdrop(layer, 0x2E000000, 2, 2);  // light dim, so Home stays visible behind
+        addBlurredBackdrop(layer, 0x2E000000, 2, 2, 0.3f);  // backdrop 70% transparent: Home shows through
 
         int col = dp(141), gap = dp(13), cap = (col - gap) / 2, small = (2 * col + gap - 3 * gap) / 4;
         int w = 2 * col + gap;
@@ -3163,13 +3163,15 @@ public class MainActivity extends Activity {
                 }));
         // Row 4: round shortcuts \u2014 Inputs (TVs with inputs) or Accessibility, controllers, Settings, Search.
         int y4 = y3 + cap + gap;
-        String[] g = inputs.isEmpty() ? new String[]{"gamepad", "accessibility", "gear", "search"}
-                : new String[]{"input", "gamepad", "gear", "search"};
+        String[] g = inputs.isEmpty() ? new String[]{"accessibility", "developer", "gear", "search"}
+                : new String[]{"input", "developer", "gear", "search"};
         for (int i = 0; i < g.length; i++) {
             String name = g[i];
             cells.add(ccTile(panel, i * (small + gap), y4, small, small, name, null, null, false, v -> {
                 switch (name) {
-                    case "gamepad": Suggestions.start(this, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)); break;
+                    case "developer":
+                        openDeveloperSettings();
+                        break;
                     case "accessibility": Suggestions.start(this, new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)); break;
                     case "input":
                         showInputs(ccButton);
@@ -3461,6 +3463,21 @@ public class MainActivity extends Activity {
             if (Suggestions.start(this, i)) return true;
         }
         toast("Not available on this TV");
+        return false;
+    }
+
+    /** The TV's Developer options (they must have been switched on once: About > tap Build). */
+    boolean openDeveloperSettings() {
+        List<Intent> tries = new ArrayList<>();
+        tries.add(new Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS));
+        for (ActivityInfo ai : settingsActivities("development")) {
+            tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
+        }
+        for (Intent i : tries) {
+            if (Suggestions.start(this, i)) return true;
+        }
+        toast("Developer options are off. Turn them on: Settings > Device Preferences > About > tap Build 7 times");
+        Suggestions.start(this, new Intent(Settings.ACTION_SETTINGS));
         return false;
     }
 
@@ -3932,11 +3949,11 @@ public class MainActivity extends Activity {
      * a quarter-size snapshot taken once when the overlay opens, then blurred off the GPU path.
      */
     void addBlurredBackdrop(FrameLayout layer, int dim) {
-        addBlurredBackdrop(layer, dim, 4, 3);
+        addBlurredBackdrop(layer, dim, 4, 3, 1f);
     }
 
     /** Backdrop with an adjustable blur: smaller radius / fewer passes keep Home more visible. */
-    void addBlurredBackdrop(FrameLayout layer, int dim, int blurRadius, int blurPasses) {
+    void addBlurredBackdrop(FrameLayout layer, int dim, int blurRadius, int blurPasses, float opacity) {
         ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.FIT_XY);
         try {
@@ -3952,9 +3969,11 @@ public class MainActivity extends Activity {
             Bitmap bg = glassSource.get();
             if (bg != null) iv.setImageBitmap(bg);
         }
+        iv.setAlpha(opacity);
         layer.addView(iv, match());
         View v = new View(this);
         v.setBackgroundColor(dim);
+        v.setAlpha(opacity);
         layer.addView(v, match());
     }
 

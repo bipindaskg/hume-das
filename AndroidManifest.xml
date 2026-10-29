@@ -31,6 +31,9 @@
         <intent>
             <action android:name="android.settings.APPLICATION_SETTINGS" />
         </intent>
+        <intent>
+            <action android:name="android.settings.APPLICATION_DEVELOPMENT_SETTINGS" />
+        </intent>
         <package android:name="com.stremio.one" />
         <package android:name="com.nuvio.tv" />
         <package android:name="com.nuvio.tv.test" />
