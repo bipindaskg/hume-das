@@ -2285,56 +2285,13 @@ public class MainActivity extends Activity {
             showInputs(tile);
             return;
         }
-
-        int[] loc = new int[2];
-        tile.getLocationInWindow(loc);
-        int[] rootLoc = new int[2];
-        root.getLocationInWindow(rootLoc);
-        float vx = loc[0] - rootLoc[0];
-        float vy = loc[1] - rootLoc[1];
-        float sx0 = tile.getWidth() * tile.getScaleX() / root.getWidth();
-        float sy0 = tile.getHeight() * tile.getScaleY() / root.getHeight();
-
-        // The card exactly as it looks on screen right now (scaled by focus/press).
-        RectF card = new RectF(vx, vy, vx + tile.getWidth() * tile.getScaleX(),
-                vy + tile.getHeight() * tile.getScaleY());
-        int startColor = a.banner != null ? edgeColor(a) : a.color;
-        int endColor = launchBackground(a, startColor);
-        LaunchCard art = new LaunchCard(card, radius * tile.getScaleX(),
-                a.banner != null ? bannerArt(a) : null, copyOf(a.icon), startColor,
-                // Icon apps fill with a flat colour, so they can hand off to the app's own colour.
-                a.banner == null && colorDistance(startColor, endColor) > 12 ? endColor : startColor);
-        View ov = new View(this);
-        ov.setBackground(art);
-        ov.setElevation(dp(24));
-        root.addView(ov, new FrameLayout.LayoutParams(root.getWidth(), root.getHeight()));
-        launchOverlay = ov;
-        launchTile = tile;
-        tile.setAlpha(0f);
-
-        ValueAnimator zoom = ValueAnimator.ofFloat(0f, 1f);
-        zoom.setDuration(480);
-        zoom.setInterpolator(EASE);
-        zoom.addUpdateListener(an -> art.setProgress((float) an.getAnimatedValue()));
-        zoom.start();
-
-        scroll.animate().withLayer().scaleX(0.9f).scaleY(0.9f).alpha(0f).setDuration(420).setInterpolator(EASE)
-                .setUpdateListener(null).start();
-        clockBox.animate().alpha(0f).setDuration(250).start();
-        switcher.animate().alpha(0f).setDuration(250).start();
-        weatherCard.animate().alpha(0f).setDuration(250).start();
-
-        handler.postDelayed(() -> {
-            try {
-                Bundle opts = ActivityOptions.makeCustomAnimation(
-                        this, R.anim.app_enter, R.anim.home_hold).toBundle();
-                startActivity(a.launch, opts);
-                noteLaunched(a.pkg);
-            } catch (ActivityNotFoundException | SecurityException e) {
-                toast("Can't open " + a.label);
-                finishLaunchReturn();
-            }
-        }, 380);
+        // Opens the app straight away: no zoom card in between.
+        try {
+            startActivity(a.launch);
+            noteLaunched(a.pkg);
+        } catch (ActivityNotFoundException | SecurityException e) {
+            toast("Can't open " + a.label);
+        }
     }
 
     /** Coming back to Home after a launch: the card fades away and the grid zooms back in. */
@@ -3179,8 +3136,8 @@ public class MainActivity extends Activity {
         List<View> cells = new ArrayList<>();
 
         // Row 1: Power | Memory (used bar; OK cleans). Row 2: Wi-Fi | Do Not Disturb.
-        cells.add(ccTile(panel, 0, 0, col, cap, "power", "Power Off", null, false, v -> {
-            if (!SleepReceiver.sleepNow(this)) Perms.requestAdmin(this);
+        cells.add(ccTile(panel, 0, 0, col, cap, "gear", "Settings", null, false, v -> {
+            if (openTvSettings(Settings.ACTION_SETTINGS)) closeProfilePicker();
         }));
         View mem = ccTile(panel, col + gap, 0, col, cap, "memory", "Memory", this::memoryState, false, v -> cleanMemory());
         addMemoryBar(mem);
@@ -3193,14 +3150,16 @@ public class MainActivity extends Activity {
                 }));
         cells.add(ccTile(panel, col + gap, cap + gap, col, cap, "bluetooth", "Bluetooth", this::bluetoothState, false,
                 v -> {
-                    if (Suggestions.start(this, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS))) closeProfilePicker();
+                    if (openTvSettings(Settings.ACTION_BLUETOOTH_SETTINGS)) closeProfilePicker();
                 }));
         // Row 3: Audio | Sleep Timer
         int y3 = 2 * (cap + gap);
         cells.add(ccTile(panel, 0, y3, col, cap, "audio", "Audio", this::audioOutput, false,
                 v -> Suggestions.start(this, new Intent("android.settings.SOUND_SETTINGS"))));
-        cells.add(ccTile(panel, col + gap, y3, col, cap, "timer", "Sleep Timer", this::timerState, false,
-                v -> cycleSleepTimer()));
+        cells.add(ccTile(panel, col + gap, y3, col, cap, "apps", "Apps", null, false,
+                v -> {
+                    if (openTvSettings(Settings.ACTION_APPLICATION_SETTINGS)) closeProfilePicker();
+                }));
         // Row 4: round shortcuts \u2014 Inputs (TVs with inputs) or Accessibility, controllers, Settings, Search.
         int y4 = y3 + cap + gap;
         String[] g = inputs.isEmpty() ? new String[]{"gamepad", "accessibility", "gear", "search"}
@@ -3450,6 +3409,53 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             return "Connected";
         }
+    }
+
+    /**
+     * Opens a page of the TV's own settings app. {@code action} is the standard settings action
+     * for it; Bluetooth and Apps pages are found by name first, because some TVs map the standard
+     * action to the top-level Settings screen instead of "Remotes & Accessories" / "Apps".
+     * Falls back to the TV's main Settings. Returns true once something opened.
+     */
+    boolean openTvSettings(String action) {
+        List<Intent> tries = new ArrayList<>();
+        String key = Settings.ACTION_BLUETOOTH_SETTINGS.equals(action) ? "accessor"
+                : Settings.ACTION_APPLICATION_SETTINGS.equals(action) ? "apps" : null;
+        if (key != null) {
+            Set<String> pkgs = new java.util.LinkedHashSet<>();
+            pkgs.add("com.android.tv.settings");
+            try {
+                ResolveInfo ri = getPackageManager().resolveActivity(new Intent(Settings.ACTION_SETTINGS), 0);
+                if (ri != null) pkgs.add(ri.activityInfo.packageName);
+            } catch (Exception e) {
+                // keep the default package
+            }
+            for (String pkg : pkgs) {
+                try {
+                    android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(pkg, PackageManager.GET_ACTIVITIES);
+                    List<ActivityInfo> named = new ArrayList<>();
+                    for (ActivityInfo ai : pi.activities == null ? new ActivityInfo[0] : pi.activities) {
+                        String n = ai.name.substring(ai.name.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT);
+                        boolean wanted = key.equals("accessor") ? n.contains("accessor") && !n.contains("add")
+                                && !n.contains("pair") && !n.contains("bluetoothaccessory")
+                                : n.equals("appsactivity") || n.equals("appsettingsactivity");
+                        if (ai.exported && wanted) named.add(ai);
+                    }
+                    for (ActivityInfo ai : named) {
+                        tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
+                    }
+                } catch (Exception e) {
+                    // package not present: skip
+                }
+            }
+        }
+        tries.add(new Intent(action));
+        tries.add(new Intent(Settings.ACTION_SETTINGS));
+        for (Intent i : tries) {
+            if (Suggestions.start(this, i)) return true;
+        }
+        toast("Not available on this TV");
+        return false;
     }
 
     /** On/Off from the system setting, which needs no Bluetooth permission. */

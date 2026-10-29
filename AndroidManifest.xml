@@ -20,6 +20,17 @@
     <uses-permission android:name="com.android.providers.tv.permission.READ_EPG_DATA" />
 
     <queries>
+        <package android:name="com.android.tv.settings" />
+        <package android:name="com.android.settings" />
+        <intent>
+            <action android:name="android.settings.SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.BLUETOOTH_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.settings.APPLICATION_SETTINGS" />
+        </intent>
         <package android:name="com.stremio.one" />
         <package android:name="com.nuvio.tv" />
         <package android:name="com.nuvio.tv.test" />

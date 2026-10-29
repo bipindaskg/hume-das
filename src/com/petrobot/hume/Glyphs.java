@@ -60,6 +60,16 @@ final class Glyphs {
                 path.lineTo(s * 0.28f, s * 0.68f);
                 c.drawPath(path, p);
                 break;
+            case "apps":  // 3 x 3 grid of squares (Apps)
+                p.setStyle(Paint.Style.FILL);
+                for (int ix = 0; ix < 3; ix++) {
+                    for (int iy = 0; iy < 3; iy++) {
+                        float x0 = s * (0.16f + 0.26f * ix), y0 = s * (0.16f + 0.26f * iy);
+                        r.set(x0, y0, x0 + s * 0.16f, y0 + s * 0.16f);
+                        c.drawRoundRect(r, s * 0.04f, s * 0.04f, p);
+                    }
+                }
+                break;
             case "moon":
                 p.setStyle(Paint.Style.FILL);
                 path.addCircle(m, m, s * 0.34f, Path.Direction.CW);
