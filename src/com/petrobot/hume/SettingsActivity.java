@@ -544,6 +544,7 @@ public class SettingsActivity extends Activity {
     /** Name of a hidden app from its key (a flattened component name such as pkg/.Activity). */
     String appLabel(String key) {
         if (MainActivity.INPUTS_KEY.equals(key)) return "Inputs";
+        if (MainActivity.SETTINGS_KEY.equals(key)) return "Settings";
         try {
             android.content.ComponentName cn = android.content.ComponentName.unflattenFromString(key);
             if (cn != null) {

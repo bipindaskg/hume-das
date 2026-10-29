@@ -3027,7 +3027,7 @@ public class MainActivity extends Activity {
         } else {
             labels.add("Move");
             actions.add(() -> startMove(index));
-            if (!isSettings(a)) {
+            if (!isSettings(a) || TV_SETTINGS.equals(a.pkg) || SETTINGS_KEY.equals(a.key)) {
                 labels.add("Hide");
                 actions.add(() -> setHidden(a, true));
             }
@@ -3411,51 +3411,91 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Activities of the TV's settings app(s) whose class name contains one of {@code words}. */
+    List<ActivityInfo> settingsActivities(String... words) {
+        Set<String> pkgs = new java.util.LinkedHashSet<>();
+        pkgs.add(TV_SETTINGS);
+        try {
+            ResolveInfo ri = getPackageManager().resolveActivity(new Intent(Settings.ACTION_SETTINGS), 0);
+            if (ri != null) pkgs.add(ri.activityInfo.packageName);
+        } catch (Exception e) {
+            // keep the default package
+        }
+        List<ActivityInfo> out = new ArrayList<>();
+        for (String pkg : pkgs) {
+            try {
+                android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(pkg, PackageManager.GET_ACTIVITIES);
+                if (pi.activities == null) continue;
+                for (ActivityInfo ai : pi.activities) {
+                    String n = ai.name.substring(ai.name.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT);
+                    for (String w : words) {
+                        if (n.contains(w)) {
+                            out.add(ai);
+                            break;
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                // package not present: skip
+            }
+        }
+        return out;
+    }
+
     /**
      * Opens a page of the TV's own settings app. {@code action} is the standard settings action
-     * for it; Bluetooth and Apps pages are found by name first, because some TVs map the standard
-     * action to the top-level Settings screen instead of "Remotes & Accessories" / "Apps".
-     * Falls back to the TV's main Settings. Returns true once something opened.
+     * for it; the Bluetooth and Apps pages are found by name first, because some TVs map the
+     * standard action to the top-level Settings screen instead of "Remotes & Accessories" / "Apps".
+     * Returns true once the page opened. If the Bluetooth page can't be found, a list of the TV's
+     * settings screens is shown instead, so the right one can be picked (and reported).
      */
     boolean openTvSettings(String action) {
         List<Intent> tries = new ArrayList<>();
-        String key = Settings.ACTION_BLUETOOTH_SETTINGS.equals(action) ? "accessor"
-                : Settings.ACTION_APPLICATION_SETTINGS.equals(action) ? "apps" : null;
-        if (key != null) {
-            Set<String> pkgs = new java.util.LinkedHashSet<>();
-            pkgs.add("com.android.tv.settings");
-            try {
-                ResolveInfo ri = getPackageManager().resolveActivity(new Intent(Settings.ACTION_SETTINGS), 0);
-                if (ri != null) pkgs.add(ri.activityInfo.packageName);
-            } catch (Exception e) {
-                // keep the default package
+        boolean bluetooth = Settings.ACTION_BLUETOOTH_SETTINGS.equals(action);
+        if (bluetooth) {
+            for (ActivityInfo ai : settingsActivities("accessor")) {
+                String n = ai.name.toLowerCase(java.util.Locale.ROOT);
+                if (n.contains("add") || n.contains("pair")) continue;
+                tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
             }
-            for (String pkg : pkgs) {
-                try {
-                    android.content.pm.PackageInfo pi = getPackageManager().getPackageInfo(pkg, PackageManager.GET_ACTIVITIES);
-                    List<ActivityInfo> named = new ArrayList<>();
-                    for (ActivityInfo ai : pi.activities == null ? new ActivityInfo[0] : pi.activities) {
-                        String n = ai.name.substring(ai.name.lastIndexOf('.') + 1).toLowerCase(java.util.Locale.ROOT);
-                        boolean wanted = key.equals("accessor") ? n.contains("accessor") && !n.contains("add")
-                                && !n.contains("pair") && !n.contains("bluetoothaccessory")
-                                : n.equals("appsactivity") || n.equals("appsettingsactivity");
-                        if (ai.exported && wanted) named.add(ai);
-                    }
-                    for (ActivityInfo ai : named) {
-                        tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
-                    }
-                } catch (Exception e) {
-                    // package not present: skip
-                }
+        } else if (Settings.ACTION_APPLICATION_SETTINGS.equals(action)) {
+            for (ActivityInfo ai : settingsActivities("appsactivity", "appsettingsactivity")) {
+                tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
             }
         }
-        tries.add(new Intent(action));
-        tries.add(new Intent(Settings.ACTION_SETTINGS));
+        if (!bluetooth) {
+            tries.add(new Intent(action));
+            tries.add(new Intent(Settings.ACTION_SETTINGS));
+        }
         for (Intent i : tries) {
             if (Suggestions.start(this, i)) return true;
         }
+        if (bluetooth) {
+            showSettingsPicker();
+            return false;
+        }
         toast("Not available on this TV");
         return false;
+    }
+
+    /** Lists the TV's Bluetooth / accessory / remote settings screens; selecting one opens it. */
+    void showSettingsPicker() {
+        List<String> labels = new ArrayList<>();
+        List<Intent> intents = new ArrayList<>();
+        labels.add("Standard Bluetooth action");
+        intents.add(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
+        labels.add("General TV settings");
+        intents.add(new Intent(Settings.ACTION_SETTINGS));
+        for (ActivityInfo ai : settingsActivities("accessor", "bluetooth", "remote", "pair", "device")) {
+            String n = ai.name.startsWith(ai.packageName) ? ai.name.substring(ai.packageName.length()) : ai.name;
+            labels.add(n + (ai.exported ? "" : "  (not exported)"));
+            intents.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
+        }
+        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                .setTitle("Bluetooth settings: pick one")
+                .setItems(labels.toArray(new String[0]), (d, w) -> {
+                    if (!Suggestions.start(this, intents.get(w))) toast("Couldn't open that screen");
+                }).show();
     }
 
     /** On/Off from the system setting, which needs no Bluetooth permission. */
