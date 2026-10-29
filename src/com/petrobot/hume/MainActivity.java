@@ -3127,7 +3127,7 @@ public class MainActivity extends Activity {
         ccLayer = layer;
         layer.setClickable(true);
         layer.setClipChildren(false);
-        addBlurredBackdrop(layer, 0x8C000000);
+        addBlurredBackdrop(layer, 0x2E000000, 2, 2);  // light dim, so Home stays visible behind
 
         int col = dp(141), gap = dp(13), cap = (col - gap) / 2, small = (2 * col + gap - 3 * gap) / 4;
         int w = 2 * col + gap;
@@ -3150,7 +3150,8 @@ public class MainActivity extends Activity {
                 }));
         cells.add(ccTile(panel, col + gap, cap + gap, col, cap, "bluetooth", "Bluetooth", this::bluetoothState, false,
                 v -> {
-                    if (openTvSettings(Settings.ACTION_BLUETOOTH_SETTINGS)) closeProfilePicker();
+                    if (Suggestions.start(this, new Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                            || Suggestions.start(this, new Intent(Settings.ACTION_SETTINGS))) closeProfilePicker();
                 }));
         // Row 3: Audio | Sleep Timer
         int y3 = 2 * (cap + gap);
@@ -3178,9 +3179,9 @@ public class MainActivity extends Activity {
                         startActivity(new Intent(this, SettingsActivity.class));
                         break;
                     default:
-                        if (!Suggestions.start(this, new Intent(Intent.ACTION_ASSIST))) {
-                            Suggestions.start(this, new Intent("android.search.action.GLOBAL_SEARCH"));
-                        }
+                        closeProfilePicker();
+                        showSearch(null);
+                        return;
                 }
                 closeProfilePicker();
             }));
@@ -3444,58 +3445,23 @@ public class MainActivity extends Activity {
 
     /**
      * Opens a page of the TV's own settings app. {@code action} is the standard settings action
-     * for it; the Bluetooth and Apps pages are found by name first, because some TVs map the
-     * standard action to the top-level Settings screen instead of "Remotes & Accessories" / "Apps".
-     * Returns true once the page opened. If the Bluetooth page can't be found, a list of the TV's
-     * settings screens is shown instead, so the right one can be picked (and reported).
+     * for it; the Apps page is found by name first, because some TVs map the standard action to
+     * the top-level Settings screen. Falls back to the main Settings. Returns true once it opened.
      */
     boolean openTvSettings(String action) {
         List<Intent> tries = new ArrayList<>();
-        boolean bluetooth = Settings.ACTION_BLUETOOTH_SETTINGS.equals(action);
-        if (bluetooth) {
-            for (ActivityInfo ai : settingsActivities("accessor")) {
-                String n = ai.name.toLowerCase(java.util.Locale.ROOT);
-                if (n.contains("add") || n.contains("pair")) continue;
-                tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
-            }
-        } else if (Settings.ACTION_APPLICATION_SETTINGS.equals(action)) {
+        if (Settings.ACTION_APPLICATION_SETTINGS.equals(action)) {
             for (ActivityInfo ai : settingsActivities("appsactivity", "appsettingsactivity")) {
                 tries.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
             }
         }
-        if (!bluetooth) {
-            tries.add(new Intent(action));
-            tries.add(new Intent(Settings.ACTION_SETTINGS));
-        }
+        tries.add(new Intent(action));
+        tries.add(new Intent(Settings.ACTION_SETTINGS));
         for (Intent i : tries) {
             if (Suggestions.start(this, i)) return true;
         }
-        if (bluetooth) {
-            showSettingsPicker();
-            return false;
-        }
         toast("Not available on this TV");
         return false;
-    }
-
-    /** Lists the TV's Bluetooth / accessory / remote settings screens; selecting one opens it. */
-    void showSettingsPicker() {
-        List<String> labels = new ArrayList<>();
-        List<Intent> intents = new ArrayList<>();
-        labels.add("Standard Bluetooth action");
-        intents.add(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS));
-        labels.add("General TV settings");
-        intents.add(new Intent(Settings.ACTION_SETTINGS));
-        for (ActivityInfo ai : settingsActivities("accessor", "bluetooth", "remote", "pair", "device")) {
-            String n = ai.name.startsWith(ai.packageName) ? ai.name.substring(ai.packageName.length()) : ai.name;
-            labels.add(n + (ai.exported ? "" : "  (not exported)"));
-            intents.add(new Intent().setComponent(new ComponentName(ai.packageName, ai.name)));
-        }
-        new AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                .setTitle("Bluetooth settings: pick one")
-                .setItems(labels.toArray(new String[0]), (d, w) -> {
-                    if (!Suggestions.start(this, intents.get(w))) toast("Couldn't open that screen");
-                }).show();
     }
 
     /** On/Off from the system setting, which needs no Bluetooth permission. */
@@ -3966,6 +3932,11 @@ public class MainActivity extends Activity {
      * a quarter-size snapshot taken once when the overlay opens, then blurred off the GPU path.
      */
     void addBlurredBackdrop(FrameLayout layer, int dim) {
+        addBlurredBackdrop(layer, dim, 4, 3);
+    }
+
+    /** Backdrop with an adjustable blur: smaller radius / fewer passes keep Home more visible. */
+    void addBlurredBackdrop(FrameLayout layer, int dim, int blurRadius, int blurPasses) {
         ImageView iv = new ImageView(this);
         iv.setScaleType(ImageView.ScaleType.FIT_XY);
         try {
@@ -3974,7 +3945,7 @@ public class MainActivity extends Activity {
             Canvas c = new Canvas(snap);
             c.scale(w / (float) screenW, h / (float) screenH);
             root.draw(c);
-            Bitmap blurred = Ui.blur(snap, w / 2, h / 2, 4, 3);
+            Bitmap blurred = Ui.blur(snap, w / 2, h / 2, blurRadius, blurPasses);
             snap.recycle();
             if (blurred != null) iv.setImageBitmap(blurred);
         } catch (Throwable e) {
